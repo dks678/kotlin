@@ -28,6 +28,9 @@ class Kotlin2JsIrGradlePluginIT : AbstractKotlin2JsGradlePluginIT(true) {
         return super.defaultBuildOptions().copy(warningMode = WarningMode.Summary)
     }
 
+    override val defaultGradleVersion: GradleVersionRequired
+        get() = GradleVersionRequired.AtLeast("6.0")
+
     @Test
     fun generateDts() {
         val project = Project("kotlin2JsIrDtsGeneration")

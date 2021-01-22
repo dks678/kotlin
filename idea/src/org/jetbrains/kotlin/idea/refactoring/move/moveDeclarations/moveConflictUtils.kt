@@ -38,7 +38,10 @@ import org.jetbrains.kotlin.idea.caches.resolve.*
 import org.jetbrains.kotlin.idea.caches.resolve.util.getJavaMemberDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.util.hasJavaResolutionFacade
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
+import org.jetbrains.kotlin.idea.core.getPackage
 import org.jetbrains.kotlin.idea.core.isInTestSourceContentKotlinAware
+import org.jetbrains.kotlin.idea.core.util.toPsiDirectory
+import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
 import org.jetbrains.kotlin.idea.project.forcedTargetPlatform
@@ -49,6 +52,7 @@ import org.jetbrains.kotlin.idea.search.and
 import org.jetbrains.kotlin.idea.search.not
 import org.jetbrains.kotlin.idea.util.projectStructure.getModule
 import org.jetbrains.kotlin.idea.util.projectStructure.module
+import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.java.JavaDescriptorVisibilities
 import org.jetbrains.kotlin.name.FqName
@@ -61,10 +65,8 @@ import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.renderer.ParameterNameRenderingPolicy
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
-import org.jetbrains.kotlin.resolve.descriptorUtil.getImportableDescriptor
-import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
-import org.jetbrains.kotlin.resolve.descriptorUtil.isSubclassOf
+import org.jetbrains.kotlin.resolve.descriptorUtil.*
+import org.jetbrains.kotlin.resolve.jvm.KotlinJavaPsiFacade
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.lazy.descriptors.findPackageFragmentForFile
 import org.jetbrains.kotlin.resolve.source.KotlinSourceElement
@@ -519,6 +521,54 @@ class MoveConflictChecker(
                 }
             }
         }
+    }
+
+    @OptIn(ExperimentalStdlibApi::class)
+    private fun classMoveIsSafeForSealedHierarchy(classToMove: KtClassOrObject): Boolean {
+        fun tryGetPackageFromTargetContainer(): PsiPackage? {
+            val fqName = moveTarget.targetContainerFqName ?: return null
+            val module = moveTarget.getTargetModule(project) ?: return null
+            return KotlinJavaPsiFacade.getInstance(project).findPackage(fqName.asString(), GlobalSearchScope.moduleScope(module))
+        }
+
+
+        val classDescriptor = classToMove.resolveToDescriptorIfAny() ?: return false
+
+        val sealedParentDescriptors = buildList {
+            classDescriptor.getSuperClassNotAny()?.takeIf { it.isSealed() }?.let { this.add(it) }
+            classDescriptor.getSuperInterfaces().filter { it.isSealed() }.let { this.addAll(it) }
+        }
+
+        // not a part of sealed hierarchy?
+        if (!classDescriptor.isSealed() && sealedParentDescriptors.isEmpty())
+            return true
+
+        // standalone sealed class: no sealed parents, no descendants?
+        if (classDescriptor.isSealed() && sealedParentDescriptors.isEmpty() && classDescriptor.sealedSubclasses.isEmpty())
+            return true
+
+        val sealedParents = sealedParentDescriptors.mapNotNull { it.findPsi() }
+        val sealedDescendants = classDescriptor.sealedSubclasses.mapNotNull { it.findPsi() }
+
+        // entire hierarchy is to be moved at once?
+        if (sealedParents.all { isToBeMoved(it) } && sealedDescendants.all { isToBeMoved(it) })
+            return true
+
+        // Ok, we're dealing with sealed hierarchy. It might be broken (members reside in different packages) and we shouldn't prevent
+        // intention to fix it (quick-fix using Move exists). That is why it's ok to move the class to a package where at least one member
+        // of hierarchy resides. In case the hierarchy is fully correct all its members share the same package.
+
+        val targetPackage = moveTarget.targetFile?.toPsiDirectory(project)?.getPackage()
+            ?: moveTarget.targetFile?.toPsiFile(project)?.containingDirectory?.getPackage()
+            ?: tryGetPackageFromTargetContainer()
+            ?: return false
+
+        if (sealedParents.any { it.containingFile.containingDirectory.getPackage() == targetPackage } ||
+            sealedDescendants.any { it.containingFile.containingDirectory.getPackage() == targetPackage }) {
+            return true
+        }
+
+        return false //todo: message?
     }
 
     private fun checkSealedClassMove(conflicts: MultiMap<PsiElement, String>) {

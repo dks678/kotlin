@@ -15,8 +15,8 @@ import java.net.URL
 import kotlin.system.exitProcess
 
 
-// According to https://www.unicode.org/standard/versions/ the latest versions of all of the Unicode Character Database files are kept in http://www.unicode.org/Public/UCD/latest/
-private const val latestUnicodeDataUrl = "https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt"
+// Go to https://www.unicode.org/versions/latest/ to find out the latest public version of the Unicode Character Database files.
+private const val unicodeDataUrl = "https://www.unicode.org/Public/13.0.0/ucd/UnicodeData.txt"
 
 /**
  * This program generates sources related to UnicodeData.txt.
@@ -29,7 +29,7 @@ private const val latestUnicodeDataUrl = "https://www.unicode.org/Public/UCD/lat
  */
 fun main(args: Array<String>) {
 
-    val unicodeDataLines = URL(latestUnicodeDataUrl).openStream().reader().readLines()
+    val unicodeDataLines = URL(unicodeDataUrl).openStream().reader().readLines()
 
     val generators = mutableListOf<UnicodeDataGenerator>()
 

@@ -190,5 +190,8 @@ object ByDescriptorIndexer : DecompiledTextIndexer<String> {
         return descriptorRendererForKeys.render(this)
     }
 
-    private val descriptorRendererForKeys = DescriptorRenderer.withOptions { defaultDecompilerRendererOptions() }
+    private val descriptorRendererForKeys = DescriptorRenderer.withOptions {
+        defaultDecompilerRendererOptions()
+        withDefinedIn = true
+    }
 }

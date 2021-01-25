@@ -23,7 +23,7 @@ abstract class DukatTask(
 
     @get:Internal
     val compilationName by lazy {
-        compilation.name
+        compilation.disambiguatedName
     }
 
     init {

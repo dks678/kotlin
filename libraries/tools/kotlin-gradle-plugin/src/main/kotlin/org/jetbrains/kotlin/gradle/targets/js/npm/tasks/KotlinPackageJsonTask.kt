@@ -34,7 +34,7 @@ open class KotlinPackageJsonTask : DefaultTask() {
     private lateinit var compilation: KotlinJsCompilation
 
     private val compilationName by lazy {
-        compilation.name
+        compilation.disambiguatedName
     }
 
     @Input

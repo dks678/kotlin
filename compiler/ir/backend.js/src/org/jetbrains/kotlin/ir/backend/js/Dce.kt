@@ -407,13 +407,17 @@ fun usefulDeclarations(roots: Iterable<IrDeclaration>, context: JsIrBackendConte
                 }
             }
         }
+
+        context.additionalExportedDeclarations
+            .filter { it !in result }
+            .forEach { it.enqueue(null, "from additionalExportedDeclarations", altFromFqn = "<ROOT>") }
     }
 
     if (printReachabilityInfo) {
         reachabilityInfo.forEach(::println)
     }
 
-    return result + context.additionalExportedDeclarations
+    return result
 }
 
 private fun Collection<IrClass>.filterDescendantsOf(bases: Collection<IrClass>): Collection<IrClass> {
